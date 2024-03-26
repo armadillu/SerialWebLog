@@ -118,18 +118,9 @@ void SerialWebLog::clearLog(){
 void SerialWebLog::handleRoot(){
 
 	float mem = ESP.getFreeHeap() / 1024.0f;
-	static String a = "<html> \
-<header><style>body{line-height: 150%;}</style></header>\
-<body>\
-<p align='center'><br><h1>";
-
-	static String b = "</h1><br><iframe src='/log' width=80% height=70%></iframe> <br><br>\
-<a href='/reset'>Reset ESP</a> &vert; \
-<a href='/clearLog'>Clear Log</a>";
-
-	static String closure = "</p>\
-</body>\
-</html>";
+	static String a = "<html><header><style>body{line-height: 150%; text-align:center;}</style></header><body><br><h1>";
+	static String b = "</h1><br><iframe src='/log' width=80% height=70%></iframe> <br><br><a href='/reset'>Reset ESP</a> &vert; <a href='/clearLog'>Clear Log</a>";
+	static String closure = "</p></body></html>";
 
 	char aux[64];
 	uint64_t now = millis64();
