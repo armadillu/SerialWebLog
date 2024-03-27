@@ -118,13 +118,16 @@ void SerialWebLog::handleLog(){
 	webserver->send(200, "text/plain", textLog);
 }
 
-void SerialWebLog::handleReset(){		
+void SerialWebLog::handleReset(){
+	webserver->send(200, "text/plain", "Reset OK!");
+	delay(300);
 	ESP.restart();
 }
 
 void SerialWebLog::clearLog(){		
-	webserver->send(200, "text/html", "<html><body>Clear Log OK!</body></html>");
+	webserver->send(200, "text/plain", "Clear Log OK!");
 	textLog = "";
+	Serial.print("Cleared Log!\n");
 	print(LOG_START);
 }
 
@@ -143,7 +146,7 @@ void SerialWebLog::trimLog(){
 					if (textLog.length() - index < maxLogSize ){
 						//Serial.printf("trim log at index %d!", index);
 						done = true;
-						textLog = textLog.substring(index);					
+						textLog = "(...)" + textLog.substring(index);					
 					}
 				}
 			}
@@ -157,7 +160,7 @@ void SerialWebLog::handleRoot(){
 	float mem = ESP.getFreeHeap() / 1024.0f;
 	static String a1 = "<html><header><style>body{line-height: 150%; text-align:center;}</style><title>";
 	static String a2 = "</title></header><body><br><h1>";
-	static String b = "</h1><br><iframe src='/log' width=80% height=70%></iframe> <br><br><a href='/reset'>Reset ESP</a> &vert; <a href='/clearLog'>Clear Log</a>";
+	static String b = "</h1><br><iframe src='/log' name='a' width=80% height=70%></iframe> <br><br><a href='/log' target='a'>Log</a> &vert; <a href='/reset' target='a'>Reset ESP</a> &vert; <a href='/clearLog' target='a'>Clear Log</a>";
 	static String closure = "</p></body></html>";
 	String hstname = String(WiFi.getHostname());
 
@@ -178,7 +181,7 @@ void SerialWebLog::addHtmlExtraMenuOption(const String & title, const String & U
 	extraHTML[title] = URL;
 	compiledExtraHTML = "";
 	for (auto & it : extraHTML){
-		compiledExtraHTML += " | <a href='" + it.second + "'>" + it.first + "</a> ";
+		compiledExtraHTML += " | <a href='" + it.second + "' target='a'>" + it.first + "</a> ";
 	}
 	compiledExtraHTML += "<br>";
 }
