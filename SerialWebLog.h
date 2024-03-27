@@ -8,9 +8,6 @@ uint64_t millis64();
 class SerialWebLog{
 public:
 
-	ESP8266WebServer * webserver = nullptr;
-	String textLog;
-
 	SerialWebLog(){};
 
 	void setup(const char * hostname, const char * SSID, const char * wifi_pass);
@@ -35,7 +32,13 @@ public:
 
 protected:
 
+	void trimLog();
+
+	ESP8266WebServer * webserver = nullptr;
+	String textLog;
+
 	std::map<String, String> extraHTML;
 	String compiledExtraHTML = "<br>";
+	const uint32_t maxLogSize = 1024 * 5;
 
 };

@@ -1,4 +1,5 @@
 #include "SerialWebLog.h"
+#include <ESP8266mDNS.h>
 #include <ezTime.h>
 
 #define LOG_START 			"\n----------------------------------------------\n"
@@ -16,6 +17,8 @@ uint64_t millis64() {
 void SerialWebLog::setup(const char * hostname, const char * SSID, const char * wifi_pass){
 
 	if(webserver == nullptr){
+
+		textLog.reserve(maxLogSize);
 
 		Serial.begin(9600);
 		this->print(LOG_START);
@@ -51,6 +54,13 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		
 		webserver->begin();
 
+		if (!MDNS.begin(hostname)){
+			this->print("Error setting up mDNS responder!"); 
+		}else{
+			this->print("mDNS started!\n"); 
+		}
+		MDNS.addService("http", "tcp", 80);
+
 	}else{
 		this->print("SerialWebLog:: Trying to setup twice! Error!\n");
 	}
@@ -80,6 +90,7 @@ size_t SerialWebLog::printf(const char *format, ...) {
 	}
 	Serial.print(buffer);
 	textLog += TIMESTAMP_LOG + String(buffer);
+	trimLog();
 	if (buffer != temp) {
 		delete[] buffer;
 	}
@@ -89,15 +100,18 @@ size_t SerialWebLog::printf(const char *format, ...) {
 void SerialWebLog::print(const String &s) {
 	textLog += TIMESTAMP_LOG + s;
 	Serial.print(s);
+	trimLog();
 }
 
 void SerialWebLog::print(const char* text){
 	textLog += TIMESTAMP_LOG + String(text);
 	Serial.print(String(text));
+	trimLog();
 }
 
 void SerialWebLog::update(){
 	webserver->handleClient();
+	MDNS.update();
 }
 
 void SerialWebLog::handleLog(){
@@ -114,13 +128,38 @@ void SerialWebLog::clearLog(){
 	print(LOG_START);
 }
 
+void SerialWebLog::trimLog(){
+	if(textLog.length() > maxLogSize){
+		uint32_t index = 0;
+		bool done = false;
+		while(!done){
+			index++;
+			if(index >= textLog.length() - 1){
+				done = true;
+				//Serial.print("Can't trim end of log!\n");
+				textLog = "";
+			}else{
+				if(textLog[index] == '\n'){
+					if (textLog.length() - index < maxLogSize ){
+						//Serial.printf("trim log at index %d!", index);
+						done = true;
+						textLog = textLog.substring(index);					
+					}
+				}
+			}
+		}
+	}
+}
+
 
 void SerialWebLog::handleRoot(){
 
 	float mem = ESP.getFreeHeap() / 1024.0f;
-	static String a = "<html><header><style>body{line-height: 150%; text-align:center;}</style></header><body><br><h1>";
+	static String a1 = "<html><header><style>body{line-height: 150%; text-align:center;}</style><title>";
+	static String a2 = "</title></header><body><br><h1>";
 	static String b = "</h1><br><iframe src='/log' width=80% height=70%></iframe> <br><br><a href='/reset'>Reset ESP</a> &vert; <a href='/clearLog'>Clear Log</a>";
 	static String closure = "</p></body></html>";
+	String hstname = String(WiFi.getHostname());
 
 	char aux[64];
 	uint64_t now = millis64();
@@ -131,7 +170,7 @@ void SerialWebLog::handleRoot(){
 	String mydate = TIMESTAMP_FORMAT;
 	sprintf(aux, "%.1f KB free<br>%s<br>uptime: %d days, %d hours, %d minutes.", mem, mydate.c_str(), day, hour, min);
 
-	webserver->send(200, "text/html", a + String(WiFi.getHostname()) + b + compiledExtraHTML + String(aux) + closure);
+	webserver->send(200, "text/html", a1 + hstname + a2 + hstname + b + compiledExtraHTML + String(aux) + closure);
 }
 
 
