@@ -2,7 +2,7 @@
 #include <ESP8266mDNS.h>
 #include <ezTime.h>
 
-#define LOG_START 			"\n----------------------------------------------\n"
+#define LOG_START 			"----------------------------------------------\n"
 #define TIMESTAMP_FORMAT 	(timeStatus() == timeSet ? UTC.dateTime("d-M-Y H:i:s T"): "[unknonwn time]")
 #define TIMESTAMP_LOG  		(TIMESTAMP_FORMAT + " >> ")
 
@@ -14,6 +14,7 @@ uint64_t millis64() {
 	return (uint64_t) high32 << 32 | low32;
 }
 
+
 void SerialWebLog::setup(const char * hostname, const char * SSID, const char * wifi_pass){
 
 	if(webserver == nullptr){
@@ -24,10 +25,23 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		this->print(LOG_START);
 		this->printf("Starting \"%s\" MicroController...\n", hostname);
 
+		//register to some events
+		stationConnectedHandler = WiFi.onStationModeConnected([this](const WiFiEventStationModeConnected& evt){
+			this->printf("WIFI::onStationModeConnected() to channel %d - %02x:%02x:%02x:%02x:%02x:%02x\n", evt.channel, evt.bssid[0], evt.bssid[1],
+				evt.bssid[2], evt.bssid[3],evt.bssid[4], evt.bssid[5]);
+		});
+
+		stationDisconnectedHandler = WiFi.onStationModeDisconnected([this](const WiFiEventStationModeDisconnected& evt){
+			this->printf("WIFI::onStationDisconnected(): %d - %02x:%02x:%02x:%02x:%02x:%02x\n", evt.reason, evt.bssid[0], evt.bssid[1],
+				evt.bssid[2], evt.bssid[3],evt.bssid[4], evt.bssid[5]);
+		});
+
+
 		WiFi.setPhyMode(WIFI_PHY_MODE_11G);
 		WiFi.setSleepMode(WIFI_NONE_SLEEP);
 		WiFi.mode(WIFI_STA);	//if it gets disconnected
-		WiFi.disconnect();
+		WiFi.disconnect(true);
+		WiFi.setAutoReconnect(true);
 		WiFi.setHostname(hostname);
 		WiFi.begin(SSID, wifi_pass);
 
@@ -160,18 +174,18 @@ void SerialWebLog::handleRoot(){
 	float mem = ESP.getFreeHeap() / 1024.0f;
 	static String a1 = "<html><header><style>body{line-height: 150%; text-align:center;}</style><title>";
 	static String a2 = "</title></header><body><br><h1>";
-	static String b = "</h1><br><iframe src='/log' name='a' width=80% height=70%></iframe> <br><br><a href='/log' target='a'>Log</a> &vert; <a href='/reset' target='a'>Reset ESP</a> &vert; <a href='/clearLog' target='a'>Clear Log</a>";
+	static String b = "</h1><br><iframe src='/log' name='a' width='80%' height='70%'></iframe> <br><br><a href='/log' target='a'>Log</a> &vert; <a href='/reset' target='a'>Reset ESP</a> &vert; <a href='/clearLog' target='a'>Clear Log</a>";
 	static String closure = "</p></body></html>";
 	String hstname = String(WiFi.getHostname());
 
-	char aux[64];
+	static char aux[128];
 	uint64_t now = millis64();
-	uint32_t min = now / (1000 * 60);
-	uint32_t hour = now / (1000 * 60 * 60);
+	uint32_t min = (now / (1000 * 60))%60;
+	uint32_t hour = (now / (1000 * 60 * 60))%24;
 	uint32_t day = now / (1000 * 60 * 60 * 25);
 
 	String mydate = TIMESTAMP_FORMAT;
-	sprintf(aux, "%.1f KB free<br>%s<br>uptime: %d days, %d hours, %d minutes.", mem, mydate.c_str(), day, hour, min);
+	sprintf(aux, "%.1f KB free | WiFi RSSI: %ddBm<br>Date: %s<br>Uptime: %d days, %d hours, %d minutes.", mem, WiFi.RSSI(), mydate.c_str(), day, hour, min);
 
 	webserver->send(200, "text/html", a1 + hstname + a2 + hstname + b + compiledExtraHTML + String(aux) + closure);
 }

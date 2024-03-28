@@ -30,6 +30,7 @@ public:
 	//add extra options to html menu
 	void addHtmlExtraMenuOption(const String & title, const String & URL);
 
+
 protected:
 
 	void trimLog();
@@ -40,5 +41,9 @@ protected:
 	std::map<String, String> extraHTML;
 	String compiledExtraHTML = "<br>";
 	const uint32_t maxLogSize = 1024 * 5;
+
+	//
+	WiFiEventHandler stationConnectedHandler;
+	WiFiEventHandler stationDisconnectedHandler;
 
 };
