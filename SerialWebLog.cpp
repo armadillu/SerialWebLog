@@ -1,10 +1,23 @@
 #include "SerialWebLog.h"
+#ifdef ARDUINO_ARCH_ESP8266
 #include <ESP8266mDNS.h>
+#endif
+#ifdef ARDUINO_ARCH_ESP32
+#include <ESPmDNS.h>
+#endif
+
+
 #include <ezTime.h>
 
 #define LOG_START 			"----------------------------------------------\n"
-#define TIMESTAMP_FORMAT 	(timeStatus() == timeSet ? UTC.dateTime("d-M-Y H:i:s T"): "[unknonwn time]")
+#define TIMESTAMP_FORMAT 	(timeStatus() == timeSet ? UTC.dateTime("d-M-Y H:i:s T"): uptime() )
 #define TIMESTAMP_LOG  		(TIMESTAMP_FORMAT + " >> ")
+
+String uptime(){
+	static char aux[32];
+	sprintf(aux, "[boot + %d sec]", millis()/1000);
+	return String(aux);
+}
 
 uint64_t millis64() {
 	static uint32_t low32, high32;
@@ -15,7 +28,7 @@ uint64_t millis64() {
 }
 
 
-void SerialWebLog::setup(const char * hostname, const char * SSID, const char * wifi_pass){
+void SerialWebLog::setup(const char * hostname, const char * SSID, const char * wifi_pass, const uint8_t* bssid){
 
 	if(webserver == nullptr){
 
@@ -25,27 +38,50 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		this->print(LOG_START);
 		this->printf("Starting \"%s\" MicroController...\n", hostname);
 
-		//register to some events
+		//register to some events esp8266
+		#ifdef ARDUINO_ARCH_ESP8266
 		stationConnectedHandler = WiFi.onStationModeConnected([this](const WiFiEventStationModeConnected& evt){
-			this->printf("WIFI::onStationModeConnected() to channel %d - %02x:%02x:%02x:%02x:%02x:%02x\n", evt.channel, evt.bssid[0], evt.bssid[1],
-				evt.bssid[2], evt.bssid[3],evt.bssid[4], evt.bssid[5]);
+			this->printf("WIFI Connected to %02x:%02x:%02x:%02x:%02x:%02x - channel %d\n", evt.bssid[0], evt.bssid[1],
+				evt.bssid[2], evt.bssid[3],evt.bssid[4], evt.bssid[5], evt.channel);
 		});
 
 		stationDisconnectedHandler = WiFi.onStationModeDisconnected([this](const WiFiEventStationModeDisconnected& evt){
-			this->printf("WIFI::onStationDisconnected(): %d - %02x:%02x:%02x:%02x:%02x:%02x\n", evt.reason, evt.bssid[0], evt.bssid[1],
+			this->printf("WIFI Disconnected. Reason: %d - %02x:%02x:%02x:%02x:%02x:%02x\n", evt.reason, evt.bssid[0], evt.bssid[1],
 				evt.bssid[2], evt.bssid[3],evt.bssid[4], evt.bssid[5]);
 		});
+		#endif
+
+		//register to some events esp32
+		#ifdef ARDUINO_ARCH_ESP32
+		wifi32connectEvent = WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info){
+			uint8_t * bssid = &info.wifi_sta_connected.bssid[0];
+			this->printf("WiFi connected to: %02x:%02x:%02x:%02x:%02x:%02x, Channel: %d\n", bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5], info.wifi_sta_connected.channel );
+		}, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
+
+		wifi32disconnectEvent = WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info){
+			uint8_t * bssid = &info.wifi_sta_disconnected.bssid[0];
+			this->printf("WiFi Disconnected. Reason: %d - %02x:%02x:%02x:%02x:%02x:%02x\n", info.wifi_sta_disconnected.reason, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5] );
+		}, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+	    #endif
 
 
+		#ifdef ARDUINO_ARCH_ESP8266
 		WiFi.setPhyMode(WIFI_PHY_MODE_11G);
 		WiFi.setSleepMode(WIFI_NONE_SLEEP);
+		#endif
 		WiFi.mode(WIFI_STA);	//if it gets disconnected
 		WiFi.disconnect(true);
 		WiFi.setAutoReconnect(true);
 		WiFi.setHostname(hostname);
-		WiFi.begin(SSID, wifi_pass);
 
-		this->printf("Trying to connect to %s ...\n", SSID);
+		if(bssid == nullptr){
+			this->printf("Trying to connect to %s ...\n", SSID);
+			WiFi.begin(SSID, wifi_pass);
+		}else{
+			this->printf("Trying to connect to %s BSSID %02x:%02x:%02x:%02x:%02x:%02x\n", SSID, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+			WiFi.begin(SSID, wifi_pass, 0, bssid);
+		}		
+		
 		if (WiFi.waitForConnectResult() != WL_CONNECTED) {
 			delay(5000);
 			ESP.restart();
@@ -59,7 +95,7 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		waitForSync();
 		this->printf("NTP Sync done!\n");
 
-		webserver = new ESP8266WebServer(80);
+		webserver = new WEB_SERVER_TYPE(80);
 
 		webserver->on("/", [this](){handleRoot();});
 		webserver->on("/reset", [this](){handleReset();});
@@ -81,7 +117,7 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 }
 
 
-ESP8266WebServer* SerialWebLog::getServer(){
+WEB_SERVER_TYPE* SerialWebLog::getServer(){
 	return webserver;
 }
 
@@ -125,7 +161,9 @@ void SerialWebLog::print(const char* text){
 
 void SerialWebLog::update(){
 	webserver->handleClient();
+	#ifdef ARDUINO_ARCH_ESP8266
 	MDNS.update();
+	#endif
 }
 
 void SerialWebLog::handleLog(){
@@ -172,10 +210,13 @@ void SerialWebLog::trimLog(){
 void SerialWebLog::handleRoot(){
 
 	float mem = ESP.getFreeHeap() / 1024.0f;
+
 	static String a1 = "<html><header><style>body{line-height: 150%; text-align:center;}</style><title>";
 	static String a2 = "</title></header><body><br><h1>";
-	static String b = "</h1><br><iframe src='/log' name='a' width='80%' height='70%'></iframe> <br><br><a href='/log' target='a'>Log</a> &vert; <a href='/reset' target='a'>Reset ESP</a> &vert; <a href='/clearLog' target='a'>Clear Log</a>";
+	static String b = "</h1><br><iframe src='/log' name='a' width='80%' height='70%'></iframe> <br><br>";
+	static String menu = "<br><a href='/log' target='a'>Log</a> &vert; <a href='/reset' target='a'>Reset ESP</a> &vert; <a href='/clearLog' target='a'>Clear Log</a>";
 	static String closure = "</p></body></html>";
+
 	String hstname = String(WiFi.getHostname());
 
 	static char aux[128];
@@ -185,9 +226,16 @@ void SerialWebLog::handleRoot(){
 	uint32_t day = now / (1000 * 60 * 60 * 25);
 
 	String mydate = TIMESTAMP_FORMAT;
-	sprintf(aux, "%.1f KB free | WiFi RSSI: %ddBm<br>Date: %s<br>Uptime: %d days, %d hours, %d minutes.", mem, WiFi.RSSI(), mydate.c_str(), day, hour, min);
+	String chip;
+	#ifdef ARDUINO_ARCH_ESP8266
+	chip = "ESP8266";//ESP.getFullVersion();
+	#endif
+	#ifdef ARDUINO_ARCH_ESP32
+	chip = String(ESP.getChipModel());
+	#endif
+	sprintf(aux, "%.1f KB free | WiFi RSSI: %d dBm<br>Date: %s<br>Uptime: %d days, %d hours, %d minutes.", mem, WiFi.RSSI(), mydate.c_str(), day, hour, min);
 
-	webserver->send(200, "text/html", a1 + hstname + a2 + hstname + b + compiledExtraHTML + String(aux) + closure);
+	webserver->send(200, "text/html", a1 + hstname + a2 + hstname + b + chip + menu + compiledExtraHTML + String(aux) + closure);
 }
 
 
