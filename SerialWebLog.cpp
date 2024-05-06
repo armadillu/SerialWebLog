@@ -27,6 +27,36 @@ uint64_t millis64() {
 	return (uint64_t) high32 << 32 | low32;
 }
 
+void SerialWebLog::connectWifi(){
+	WiFi.mode(WIFI_STA);
+	WiFi.disconnect(true);
+
+	int8_t connectionResult = WL_DISCONNECTED;
+
+	while(connectionResult != WL_CONNECTED){
+
+		if(!connectOnlyToBssid){
+			this->printf("Trying to connect to \"%s\" ...\n", SSID);
+			WiFi.setAutoReconnect(true);
+			WiFi.begin(SSID, wifiPass);
+		}else{
+			this->printf("Trying to connect to \"%s\" BSSID %02x:%02x:%02x:%02x:%02x:%02x\n", SSID, targetBssid[0], targetBssid[1], targetBssid[2], targetBssid[3], targetBssid[4], targetBssid[5]);
+			WiFi.setAutoReconnect(false);
+			WiFi.begin(SSID, wifiPass, 0, targetBssid);
+		}		
+		
+		connectionResult = WiFi.waitForConnectResult(5000);
+
+		if(connectionResult == WL_CONNECTED){
+			this->printf("Connected to \"%s\" IP address \"%s\"\n", SSID, WiFi.localIP().toString().c_str());		
+		}else{
+			this->printf("Can't connect (%d)! Retrying in 5 seconds...\n", connectionResult);
+			delay(5000);
+		}
+		yield();
+	}	
+}
+
 
 void SerialWebLog::setup(const char * hostname, const char * SSID, const char * wifi_pass, const uint8_t* bssid){
 
@@ -37,17 +67,25 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		Serial.begin(9600);
 		this->print(LOG_START);
 		this->printf("Starting \"%s\" MicroController...\n", hostname);
+		#ifdef ARDUINO_ARCH_ESP8266
+		this->printf("Restart Reason: %s\n", ESP.getResetReason().c_str());
+		#endif
 
 		//register to some events esp8266
 		#ifdef ARDUINO_ARCH_ESP8266
 		stationConnectedHandler = WiFi.onStationModeConnected([this](const WiFiEventStationModeConnected& evt){
-			this->printf("WIFI Connected to %02x:%02x:%02x:%02x:%02x:%02x - channel %d\n", evt.bssid[0], evt.bssid[1],
+			this->printf("WIFI Connected to \"%02x:%02x:%02x:%02x:%02x:%02x\" - channel %d\n", evt.bssid[0], evt.bssid[1],
 				evt.bssid[2], evt.bssid[3],evt.bssid[4], evt.bssid[5], evt.channel);
 		});
 
 		stationDisconnectedHandler = WiFi.onStationModeDisconnected([this](const WiFiEventStationModeDisconnected& evt){
-			this->printf("WIFI Disconnected. Reason: %d - %02x:%02x:%02x:%02x:%02x:%02x\n", evt.reason, evt.bssid[0], evt.bssid[1],
+			this->printf("WIFI Disconnected. Reason: %d - \"%02x:%02x:%02x:%02x:%02x:%02x\"\n", evt.reason, evt.bssid[0], evt.bssid[1],
 				evt.bssid[2], evt.bssid[3],evt.bssid[4], evt.bssid[5]);
+			if(connectOnlyToBssid){
+				if (evt.reason != WIFI_DISCONNECT_REASON_ASSOC_LEAVE){ //dont want to trigger a reconnect as this event its not really a disconnect... sigh
+					shouldReconnect = true;
+				}
+			}
 		});
 		#endif
 
@@ -55,41 +93,33 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		#ifdef ARDUINO_ARCH_ESP32
 		wifi32connectEvent = WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info){
 			uint8_t * bssid = &info.wifi_sta_connected.bssid[0];
-			this->printf("WiFi connected to: %02x:%02x:%02x:%02x:%02x:%02x, Channel: %d\n", bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5], info.wifi_sta_connected.channel );
+			this->printf("WiFi connected to: \"%02x:%02x:%02x:%02x:%02x:%02x\", Channel: %d\n", bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5], info.wifi_sta_connected.channel);
 		}, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
 
 		wifi32disconnectEvent = WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info){
 			uint8_t * bssid = &info.wifi_sta_disconnected.bssid[0];
-			this->printf("WiFi Disconnected. Reason: %d - %02x:%02x:%02x:%02x:%02x:%02x\n", info.wifi_sta_disconnected.reason, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5] );
+			this->printf("WiFi Disconnected. Reason: %d - \"%02x:%02x:%02x:%02x:%02x:%02x\"\n", info.wifi_sta_disconnected.reason, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
 		}, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 	    #endif
-
 
 		#ifdef ARDUINO_ARCH_ESP8266
 		WiFi.setPhyMode(WIFI_PHY_MODE_11G);
 		WiFi.setSleepMode(WIFI_NONE_SLEEP);
 		#endif
-		WiFi.mode(WIFI_STA);	//if it gets disconnected
-		WiFi.disconnect(true);
-		WiFi.setAutoReconnect(true);
-		WiFi.setHostname(hostname);
 
+		this->SSID = String(SSID);
+		this->wifiPass = String(wifi_pass);
+		WiFi.setHostname(hostname);
 		if(bssid == nullptr){
-			this->printf("Trying to connect to %s ...\n", SSID);
-			WiFi.begin(SSID, wifi_pass);
+			connectOnlyToBssid = false;			
 		}else{
-			this->printf("Trying to connect to %s BSSID %02x:%02x:%02x:%02x:%02x:%02x\n", SSID, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
-			WiFi.begin(SSID, wifi_pass, 0, bssid);
-		}		
-		
-		if (WiFi.waitForConnectResult() != WL_CONNECTED) {
-			delay(5000);
-			ESP.restart();
+			connectOnlyToBssid = true;
+			memcpy(targetBssid, bssid, 6);
+			this->printf("WiFi connection constrained to a single BSSID (%02x:%02x:%02x:%02x:%02x:%02x)\n", bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
 		}
-		this->printf("Connected to %s IP address \"%s\"\n", SSID, WiFi.localIP().toString().c_str());
+		connectWifi();
 
 		this->printf("NTP Sync start...\n");
-
 		//setServer("1.es.pool.ntp.org");
 		//setInterval(60 * 60 * 12 /*seconds*/); //every 12 hours
 		waitForSync();
@@ -112,7 +142,7 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		MDNS.addService("http", "tcp", 80);
 
 	}else{
-		this->print("SerialWebLog:: Trying to setup twice! Error!\n");
+		this->print("SerialWebLog:: Trying to setup twice! Developer Error!\n");
 	}
 }
 
@@ -160,6 +190,10 @@ void SerialWebLog::print(const char* text){
 }
 
 void SerialWebLog::update(){
+	if(shouldReconnect){
+		shouldReconnect = false;
+		connectWifi();
+	}
 	webserver->handleClient();
 	#ifdef ARDUINO_ARCH_ESP8266
 	MDNS.update();
@@ -214,7 +248,7 @@ void SerialWebLog::handleRoot(){
 	static String a1 = "<html><header><style>body{line-height: 150%; text-align:center;}</style><title>";
 	static String a2 = "</title></header><body><br><h1>";
 	static String b = "</h1><br><iframe src='/log' name='a' width='80%' height='70%'></iframe> <br><br>";
-	static String menu = "<br><a href='/log' target='a'>Log</a> &vert; <a href='/reset' target='a'>Reset ESP</a> &vert; <a href='/clearLog' target='a'>Clear Log</a>";
+	static String menu = "<br><a href='/log' target='a'>Log</a> | <a href='/reset' target='a'>Reset ESP</a> | <a href='/clearLog' target='a'>Clear Log</a>";
 	static String closure = "</p></body></html>";
 
 	String hstname = String(WiFi.getHostname());
@@ -228,10 +262,10 @@ void SerialWebLog::handleRoot(){
 	String mydate = TIMESTAMP_FORMAT;
 	String chip;
 	#ifdef ARDUINO_ARCH_ESP8266
-	chip = "ESP8266";//ESP.getFullVersion();
+	chip = "ESP8266 | Build date: " + String(__TIMESTAMP__);//ESP.getFullVersion();
 	#endif
 	#ifdef ARDUINO_ARCH_ESP32
-	chip = String(ESP.getChipModel());
+	chip = String(ESP.getChipModel()) + " | Built: '" + String(__TIMESTAMP__) + "'";
 	#endif
 	sprintf(aux, "%.1f KB free | WiFi RSSI: %d dBm<br>Date: %s<br>Uptime: %d days, %d hours, %d minutes.", mem, WiFi.RSSI(), mydate.c_str(), day, hour, min);
 

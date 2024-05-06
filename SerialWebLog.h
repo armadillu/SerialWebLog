@@ -53,6 +53,13 @@ protected:
 	String compiledExtraHTML = "<br>";
 	const uint32_t maxLogSize = 1024 * 5; //5kb of logs at max
 
+	//keep what bssid we are constrained to connect to
+	bool connectOnlyToBssid = false;
+	bool shouldReconnect = false;
+	uint8_t targetBssid[6]= {0,0,0,0,0,0};
+	String SSID; 
+	String wifiPass;
+
 	//
 	#ifdef ARDUINO_ARCH_ESP8266
 	WiFiEventHandler stationConnectedHandler;
@@ -64,4 +71,6 @@ protected:
 	WiFiEventId_t wifi32disconnectEvent;
 	#endif
 
+
+	void connectWifi();
 };
