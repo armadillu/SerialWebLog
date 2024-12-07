@@ -9,7 +9,7 @@
 
 #include <ezTime.h>
 
-#define LOG_START 			"----------------------------------------------\n"
+#define LOG_START 			"\n----------------------------------------------\n"
 #define TIMESTAMP_FORMAT 	(timeStatus() == timeSet ? UTC.dateTime("d-M-Y H:i:s T"): uptime() )
 #define TIMESTAMP_LOG  		(TIMESTAMP_FORMAT + " >> ")
 
@@ -155,7 +155,7 @@ WEB_SERVER_TYPE* SerialWebLog::getServer(){
 size_t SerialWebLog::printf(const char *format, ...) {
 	va_list arg;
 	va_start(arg, format);
-	static char temp[64];
+	static char temp[512];
 	char* buffer = temp;
 	size_t len = vsnprintf(temp, sizeof(temp), format, arg);
 	va_end(arg);
