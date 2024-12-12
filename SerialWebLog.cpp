@@ -6,7 +6,6 @@
 #include <ESPmDNS.h>
 #endif
 
-
 #include <ezTime.h>
 
 #define LOG_START 			"\n----------------------------------------------\n"
@@ -48,10 +47,11 @@ void SerialWebLog::connectWifi(){
 		connectionResult = WiFi.waitForConnectResult(5000);
 
 		if(connectionResult == WL_CONNECTED){
-			this->printf("Connected to \"%s\" IP address \"%s\"\n", SSID, WiFi.localIP().toString().c_str());		
+			this->printf("Connected to \"%s\" IP address \"%s\"\n", SSID, WiFi.localIP().toString().c_str());
+			this->printf("Access the Web Gui at http://%s\n", WiFi.localIP().toString().c_str());
 		}else{
-			this->printf("Can't connect (%d)! Retrying in 5 seconds...\n", connectionResult);
-			delay(5000);
+			this->printf("Can't connect (%d)! Retrying in 2 seconds...\n", connectionResult);
+			delay(2000);
 		}
 		yield();
 	}	
