@@ -120,6 +120,7 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		connectWifi();
 
 		this->printf("NTP Sync start...\n");
+		this->print(LOG_START);
 		//setServer("1.es.pool.ntp.org");
 		//setInterval(60 * 60 * 12 /*seconds*/); //every 12 hours
 		waitForSync();
