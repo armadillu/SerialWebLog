@@ -51,7 +51,7 @@ protected:
 
 	std::map<String, String> extraHTML;
 	String compiledExtraHTML = "<br>";
-	const uint32_t maxLogSize = 1024 * 5; //5kb of logs at max
+	const uint32_t maxLogSize = 1024 * 10; //5kb of logs at max
 
 	//keep what bssid we are constrained to connect to
 	bool connectOnlyToBssid = false;
@@ -71,6 +71,6 @@ protected:
 	WiFiEventId_t wifi32disconnectEvent;
 	#endif
 
-
+	char* toString(const WiFiDisconnectReason & r);
 	void connectWifi();
 };

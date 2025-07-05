@@ -47,7 +47,7 @@ void SerialWebLog::connectWifi(){
 		connectionResult = WiFi.waitForConnectResult(5000);
 
 		if(connectionResult == WL_CONNECTED){
-			this->printf("Connected to \"%s\" IP address \"%s\"\n", SSID, WiFi.localIP().toString().c_str());
+			this->printf("Connected to \"%s\" IP address \"%s\" \"%s\"\n", SSID, WiFi.localIP().toString().c_str(), WiFi.BSSIDstr().c_str());
 			this->printf("Access the Web Gui at http://%s\n", WiFi.localIP().toString().c_str());
 		}else{
 			this->printf("Can't connect (%d)! Retrying in 2 seconds...\n", connectionResult);
@@ -67,6 +67,7 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		Serial.begin(9600);
 		this->print(LOG_START);
 		this->printf("Starting \"%s\" MicroController...\n", hostname);
+		this->printf("My Mac Address is \"%s\" \n", WiFi.macAddress().c_str());
 		#ifdef ARDUINO_ARCH_ESP8266
 		this->printf("Restart Reason: %s\n", ESP.getResetReason().c_str());
 		#endif
@@ -79,7 +80,7 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 		});
 
 		stationDisconnectedHandler = WiFi.onStationModeDisconnected([this](const WiFiEventStationModeDisconnected& evt){
-			this->printf("WIFI Disconnected. Reason: %d - \"%02x:%02x:%02x:%02x:%02x:%02x\"\n", evt.reason, evt.bssid[0], evt.bssid[1],
+			this->printf("WIFI Disconnected. Reason: %s - \"%02x:%02x:%02x:%02x:%02x:%02x\"\n", toString(evt.reason), evt.bssid[0], evt.bssid[1],
 				evt.bssid[2], evt.bssid[3],evt.bssid[4], evt.bssid[5]);
 			if(connectOnlyToBssid){
 				if (evt.reason != WIFI_DISCONNECT_REASON_ASSOC_LEAVE){ //dont want to trigger a reconnect as this event its not really a disconnect... sigh
@@ -103,7 +104,7 @@ void SerialWebLog::setup(const char * hostname, const char * SSID, const char * 
 	    #endif
 
 		#ifdef ARDUINO_ARCH_ESP8266
-		WiFi.setPhyMode(WIFI_PHY_MODE_11G);
+		WiFi.setPhyMode(WIFI_PHY_MODE_11N);
 		WiFi.setSleepMode(WIFI_NONE_SLEEP);
 		#endif
 
@@ -281,4 +282,39 @@ void SerialWebLog::addHtmlExtraMenuOption(const String & title, const String & U
 		compiledExtraHTML += " | <a href='" + it.second + "' target='a'>" + it.first + "</a> ";
 	}
 	compiledExtraHTML += "<br>";
+}
+
+char* SerialWebLog::toString(const WiFiDisconnectReason & r){
+	switch(r){
+		case WIFI_DISCONNECT_REASON_UNSPECIFIED: return (char*)"WIFI_DISCONNECT_REASON_UNSPECIFIED";
+	    case WIFI_DISCONNECT_REASON_AUTH_EXPIRE: return (char*)"WIFI_DISCONNECT_REASON_AUTH_EXPIRE";
+	    case WIFI_DISCONNECT_REASON_AUTH_LEAVE: return (char*)"WIFI_DISCONNECT_REASON_AUTH_LEAVE";
+	    case WIFI_DISCONNECT_REASON_ASSOC_EXPIRE: return (char*)"WIFI_DISCONNECT_REASON_ASSOC_EXPIRE";
+	    case WIFI_DISCONNECT_REASON_ASSOC_TOOMANY: return (char*)"WIFI_DISCONNECT_REASON_ASSOC_TOOMANY";
+	    case WIFI_DISCONNECT_REASON_NOT_AUTHED: return (char*)"WIFI_DISCONNECT_REASON_NOT_AUTHED";
+	    case WIFI_DISCONNECT_REASON_NOT_ASSOCED: return (char*)"WIFI_DISCONNECT_REASON_NOT_ASSOCED";
+	    case WIFI_DISCONNECT_REASON_ASSOC_LEAVE: return (char*)"WIFI_DISCONNECT_REASON_ASSOC_LEAVE";
+	    case WIFI_DISCONNECT_REASON_ASSOC_NOT_AUTHED: return (char*)"WIFI_DISCONNECT_REASON_ASSOC_NOT_AUTHED";
+	    case WIFI_DISCONNECT_REASON_DISASSOC_PWRCAP_BAD: return (char*)"WIFI_DISCONNECT_REASON_DISASSOC_PWRCAP_BAD";
+	    case WIFI_DISCONNECT_REASON_DISASSOC_SUPCHAN_BAD: return (char*)"WIFI_DISCONNECT_REASON_DISASSOC_SUPCHAN_BAD";
+	    case WIFI_DISCONNECT_REASON_IE_INVALID: return (char*)"WIFI_DISCONNECT_REASON_IE_INVALID";
+	    case WIFI_DISCONNECT_REASON_MIC_FAILURE: return (char*)"WIFI_DISCONNECT_REASON_MIC_FAILURE";
+	    case WIFI_DISCONNECT_REASON_4WAY_HANDSHAKE_TIMEOUT: return (char*)"WIFI_DISCONNECT_REASON_4WAY_HANDSHAKE_TIMEOUT";
+	    case WIFI_DISCONNECT_REASON_GROUP_KEY_UPDATE_TIMEOUT: return (char*)"WIFI_DISCONNECT_REASON_GROUP_KEY_UPDATE_TIMEOUT";
+	    case WIFI_DISCONNECT_REASON_IE_IN_4WAY_DIFFERS: return (char*)"WIFI_DISCONNECT_REASON_IE_IN_4WAY_DIFFERS";
+	    case WIFI_DISCONNECT_REASON_GROUP_CIPHER_INVALID: return (char*)"WIFI_DISCONNECT_REASON_GROUP_CIPHER_INVALID";
+	    case WIFI_DISCONNECT_REASON_PAIRWISE_CIPHER_INVALID: return (char*)"WIFI_DISCONNECT_REASON_PAIRWISE_CIPHER_INVALID";
+	    case WIFI_DISCONNECT_REASON_AKMP_INVALID: return (char*)"WIFI_DISCONNECT_REASON_AKMP_INVALID";
+	    case WIFI_DISCONNECT_REASON_UNSUPP_RSN_IE_VERSION: return (char*)"WIFI_DISCONNECT_REASON_UNSUPP_RSN_IE_VERSION";
+	    case WIFI_DISCONNECT_REASON_INVALID_RSN_IE_CAP: return (char*)"WIFI_DISCONNECT_REASON_INVALID_RSN_IE_CAP";
+	    case WIFI_DISCONNECT_REASON_802_1X_AUTH_FAILED: return (char*)"WIFI_DISCONNECT_REASON_802_1X_AUTH_FAILED";
+	    case WIFI_DISCONNECT_REASON_CIPHER_SUITE_REJECTED: return (char*)"WIFI_DISCONNECT_REASON_CIPHER_SUITE_REJECTED";
+
+	    case WIFI_DISCONNECT_REASON_BEACON_TIMEOUT: return (char*)"WIFI_DISCONNECT_REASON_BEACON_TIMEOUT";
+	    case WIFI_DISCONNECT_REASON_NO_AP_FOUND: return (char*)"WIFI_DISCONNECT_REASON_NO_AP_FOUND";
+	    case WIFI_DISCONNECT_REASON_AUTH_FAIL: return (char*)"WIFI_DISCONNECT_REASON_AUTH_FAIL";
+	    case WIFI_DISCONNECT_REASON_ASSOC_FAIL: return (char*)"WIFI_DISCONNECT_REASON_ASSOC_FAIL";
+	    case WIFI_DISCONNECT_REASON_HANDSHAKE_TIMEOUT: return (char*)"WIFI_DISCONNECT_REASON_HANDSHAKE_TIMEOUT";
+	}
+	return (char*)"Unknown";
 }
